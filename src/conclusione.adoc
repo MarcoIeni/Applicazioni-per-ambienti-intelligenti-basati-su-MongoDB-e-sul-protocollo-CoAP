@@ -1,0 +1,33 @@
+== Conclusioni e sviluppi futuri
+I requisiti della tesi sono stati rispettati e tutti gli obiettivi sono stati raggiunti con successo, creando un sistema che sposa a pieno i principi di riferimento dell'Internet of Things e che permette di accedere ai propri dispositivi o a quelli a cui si è abilitati a farlo in maniera sicura ed affidabile, combinando in modo appropriato HTTP e CoAP e utilizzando la crittografia e un approccio ibrido tra SQL e NoSQL per salvaguardare i dati dell'utente.
+
+Il sistema, inoltre, permette di creare servizi personalizzati e di installarli sui propri server e di accedere ai dispositivi con meccanismi user-frienly come gruppi di dispositivi o tag.
+
+Il lavoro di questa tesi viene portato avanti da agosto 2014, quando io e il mio collega Davide Foti (che ringrazio infinatamente per l'aiuto che mi ha dato) ci siamo cominciati a informare sul CoAP e abbiamo cominciato a testare le sue varie implementazioni. La tesi è stata conclusa, invece, a dicembre 2015.
+
+Per il futuro potrebbe essere introdotto un versioning dei vari servizi, in modo tale da permettere una gestione più avanzata all'utente oppure si potrebbe creare un meccanismo di condivisione dei servizi, in modo tale da poter visualizzare i servizi pubblici degli altri utenti e installarli nei propri server, 
+Inoltre, potrebbe essere effettuato l'aggiornamento a coapthon 3, visto che lo sviluppo del sistema è iniziato prima del suo rilascio e, quindi, si è usato coapthon 2.
+
+=== Strumenti utilizzati
+Per realizzare questa tesi sono stati utilizzati solamente programmi free e, per la maggior parte, open source, ovvero:
+
+Eclipse::
+Per la programmazione in Java e in Python. Sono stati installati, inoltre, i plugin PyDev, essenziale per python e M2Eclipse, per integrare maven in eclipse.
+
+Maven::
+Per risolvere tutte le dipendenze esterne senza scaricare manualmente le librerie
+
+Asccidoc e Asciidoctor::
+Il primo come formato della tesi e il secondo per convertirla in PDF
+
+Atom e Gedit::
+Come editor di testo per modificare la tesi
+
+yED::
+Per la creazione degli schemi
+
+https://www.websequencediagrams.com/::
+Per la creazione dei sequence diagram
+
+Class Visualizer::
+Per la creazione dei diagrammi delle classi

@@ -1,0 +1,509 @@
+== Scelta dell'implementazione del CoAP
+In questo capitolo si riporta tutto il percorso che ha portato alla scelta dell'implementazione del CoAP da utilizzare, analizzando svantaggi, vantaggi e codici creati per ogni implementazione studiata.
+
+Inizialmente si è cercato un implementazione del CoAP in Java, ma in seguito a vari problemi incontrati durante lo sviluppo, è stato necessario cambiare direzione e orientarsi verso il CoAPthon, un’implementazione basata su python (come si evince dal nome), tramite la quale si è riusciti a raggiungere gli scopi prefissati.
+
+=== jCoAP
+La prima implementazione java del CoAP che si è testata è stata jCoAP, un’ implementazione stabile ed abbastanza semplice da utilizzare. Per cominciare si è esaminato il codice del jCoAP footnote:[http://code.google.com/p/jcoap/] e, prendendo spunto da alcuni programmi di esempio(creati da Christian Lerche), si è riusciti ad ottenere una corretta comunicazione che rispecchiasse il paradigma client-server.
+
+In prima fase, infatti, piuttosto che preoccuparsi del progetto nella sua interezza, ci si è  concentrati sulla realizzazione di un client e un server che comunicassero con il protocollo CoAP.
+
+A titolo di esempio si è considerata la situazione in cui ci fosse un sensore di temperatura lato client che trasmette valori ad un server.
+
+==== Server
+Di seguito si riportano i 3 file che costituiscono il server.
+
+===== MyCoapServer
+[source,java]
+----
+import java.nio.ByteBuffer;
+import org.ws4d.coap.Constants;
+import org.ws4d.coap.connection.BasicCoapChannelManager;
+import org.ws4d.coap.interfaces.CoapChannelManager;
+import org.ws4d.coap.interfaces.CoapMessage;
+import org.ws4d.coap.interfaces.CoapRequest;
+import org.ws4d.coap.interfaces.CoapServer;
+import org.ws4d.coap.interfaces.CoapServerChannel;
+import org.ws4d.coap.messages.CoapMediaType;
+import org.ws4d.coap.messages.CoapResponseCode;
+
+// Resta in ascolto sulla porta PORT e ogni volta che gli arriva un messaggio avvia un thread che si occupa di gestire i dati(un double) contenuti in esso
+
+public class MyCoapServer implements CoapServer {
+    private final int PORT = Constants.COAP_DEFAULT_PORT;
+    static int counter = 0;
+
+    public void work(MyCoapServer server) {
+        System.out.println("Start CoAP Server on port " + PORT);
+        CoapChannelManager channelManager = BasicCoapChannelManager.getInstance();
+        channelManager.createServerListener(server, PORT);
+    }
+
+	@Override
+	public CoapServer onAccept(CoapRequest request) {
+		System.out.println("Accept connection...");
+		return this;
+	}
+
+	@Override
+	public void onRequest(CoapServerChannel channel, CoapRequest request) {
+		System.out.println("Received message: " + request.toString());
+		GestoreDato gd= new GestoreDato(ByteBuffer.wrap(request.getPayload()).getDouble()); //creo l'oggetto gd che si occuperà di fare le operazioni necessarie sul dato
+		gd.start();
+		CoapMessage response = channel.createResponse(request, CoapResponseCode.Content_205);
+		response.setContentType(CoapMediaType.text_plain);
+		channel.sendMessage(response);
+	}
+
+	@Override
+	public void onSeparateResponseFailed(CoapServerChannel channel) {
+		System.out.println("Separate response transmission failed.");
+
+	}
+}
+----
+
+===== GestoreDato
+[source,java]
+----
+public class GestoreDato extends Thread {
+
+	private double temperatura;
+
+	GestoreDato(double temperatura){
+		setTemperatura(temperatura);
+	}
+
+    void setTemperatura(double temperatura){
+        this.temperatura=temperatura;
+    }
+
+	double getTemperatura(){
+		return temperatura;
+	}
+
+	@Override
+	public void run(){
+		System.out.println(getTemperatura());
+	}
+}
+----
+
+===== DemoServer
+[source,java]
+----
+//programma che lancia il server
+public class DemoServer {
+
+	public static void main(String[] args) {
+		MyCoapServer server=new MyCoapServer();
+		server.work(server);
+	}
+
+}
+----
+
+==== Client
+Si riportano ora i 3 programmi del client
+
+===== MyCoapClient
+[source,java]
+----
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+
+import org.ws4d.coap.Constants;
+import org.ws4d.coap.connection.BasicCoapChannelManager;
+import org.ws4d.coap.interfaces.CoapChannelManager;
+import org.ws4d.coap.interfaces.CoapClient;
+import org.ws4d.coap.interfaces.CoapClientChannel;
+import org.ws4d.coap.interfaces.CoapRequest;
+import org.ws4d.coap.interfaces.CoapResponse;
+import org.ws4d.coap.messages.CoapRequestCode;
+
+
+
+// Manda al server un double rilevato da Sensore s ogni SLEEP secondi
+
+public class MyCoapClient implements CoapClient {
+
+	private final int SLEEP=5000; //millisecondi che bisogna attendere tra una lettura del sensore e un'altra
+    private String server_address;
+    private final int PORT = Constants.COAP_DEFAULT_PORT;
+    static int counter = 0;
+    CoapChannelManager channelManager;
+    CoapClientChannel clientChannel;
+
+    void setServer_address(String address){
+    	server_address=address;
+    }
+
+    public void work( MyCoapClient client ) {
+        System.out.println("Start CoAP Client");
+        client.channelManager = BasicCoapChannelManager.getInstance();
+        client.runTestClient();
+    }
+
+    public void runTestClient(){
+    	Sensore s=new Sensore();
+		byte[] bytes = new byte[8]; //bytes da spedire al server, sono 8 perché devo mandare un double
+    	try {
+			while(true){
+				clientChannel = channelManager.connect(this, InetAddress.getByName(server_address), PORT);
+				CoapRequest coapRequest = clientChannel.createRequest(true, CoapRequestCode.POST);
+			    ByteBuffer.wrap(bytes).putDouble(s.rilevaTemperatura()); //trasformo il double che rappresenta la temperatura in byte[]
+				coapRequest.setPayload(bytes);
+				clientChannel.sendMessage(coapRequest);
+				System.out.println("Message sent");
+				Thread.sleep(SLEEP);
+			}
+
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+    }
+
+	@Override
+	public void onConnectionFailed(CoapClientChannel channel, boolean notReachable, boolean resetByServer) {
+		System.out.println("Connection Failed");
+	}
+
+	@Override
+	public void onResponse(CoapClientChannel channel, CoapResponse response) {
+		System.out.println("Received response");
+		System.out.println(response.toString());
+	}
+}
+----
+
+===== DemoClient
+[source,java]
+----
+public class DemoClient {
+
+	public static void main(String[] args) {
+		MyCoapClient client=new MyCoapClient();
+		if (args.length != 0)
+			client.setServer_address(args[0]);
+		else
+			client.setServer_address("127.0.0.1");
+		client.work(client);
+	}
+
+}
+----
+
+===== Sensore
+[source,java]
+----
+public class Sensore {
+	public double rilevaTemperatura(){
+		return Math.random()*100-50; //ritorna un double tra -50 e 50
+	}
+}
+----
+
+==== Motivazioni dell'abbandono
+Una volta ottenuto il risultato precedente si è provato ad estendere il lavoro svolto, cercando di implementare uno dei requisiti fondamentali del progetto: il multicast.
+Dopo svariati tentativi ci si è resi conto che il jCoAP (almeno fino all’ultima versione disponibile al momento in cui si scrive, che è quella del 12 giugno 2012) non implementa il multicast.
+Nel codice, infatti, non era presente alcuna istruzione che permettesse l’istanza di socket di tipo multicast o meccasmi di join agli indirizzi IP riservati a questo fine.
+
+=== Californium
+
+Come conseguenza al fatto che il jCoAP non soddisfava i requisiti del progetto si è stati obbligati a cercare una nuova implementazione del protocollo, così si è studiato il Californium footnote:[http://people.inf.ethz.ch/mkovatsc/californium.php], l'implementazione più completa(e anche più complessa) del CoAP in java.
+
+Anche in questo caso ci è posti subito l'obiettivo di realizzare client e server, cosa che si è rivelata più complicata del previsto, vista la grandezza del core del californium.
+
+Successivamente, si è cercato di simulare una parte del comportamento del nostro sistema, non includendo il multicast. Si è creato(basandosi su codici di esempio), dunque, l'interruttore, il server e la lampadina. L'interruttore manda segnali al server e quest'ultimo li rimanda alla lampadina. Di seguito ne riportiamo il codice.
+
+==== Interruttore
+===== Client
+[source,java]
+----
+public class Interruttore {
+
+    public static void main(String[] args) {
+        Scanner interruttore= new Scanner(System.in);
+        String segnale;
+        while(true){
+        	Request post = new Request(Code.PUT);
+        	post.setURI("coap://127.0.0.1:4000/Listener");
+        	segnale=interruttore.nextLine();
+        	switch(segnale){
+        	case "0":
+        		post.setPayload("0");
+        		break;
+        	case "1":
+        		post.setPayload("1");
+        		break;
+        	default:
+        		System.out.println("immettere 1 o 0");
+        		continue;
+        	}
+        	post.getOptions()
+            .setContentFormat(MediaTypeRegistry.TEXT_PLAIN)
+            .setAccept(MediaTypeRegistry.TEXT_PLAIN)
+            .setIfNoneMatch(true);
+            try {
+    			String response = post.send().waitForResponse().getPayloadString();
+    			System.out.println(response);
+    		} catch (InterruptedException e) {
+    			e.printStackTrace();
+    		}
+
+        }
+
+    }
+
+}
+----
+
+==== Server
+
+===== Server
+[source,java]
+----
+package step1;
+
+import static org.eclipse.californium.core.coap.CoAP.ResponseCode.BAD_REQUEST;
+import static org.eclipse.californium.core.coap.CoAP.ResponseCode.CHANGED;
+
+import org.eclipse.californium.core.CoapResource;
+import org.eclipse.californium.core.CoapServer;
+import org.eclipse.californium.core.coap.MediaTypeRegistry;
+import org.eclipse.californium.core.coap.Request;
+import org.eclipse.californium.core.coap.CoAP.Code;
+import org.eclipse.californium.core.server.resources.CoapExchange;
+
+public class Server {
+
+	static Selector selector;
+
+	public static void main(String[] args) {
+        // binds on UDP port 5683
+        CoapServer server = new CoapServer(4000);
+        server.add(new HelloResource());
+        server.start();
+    }
+
+    public static class HelloResource extends CoapResource {
+        public HelloResource() {
+            // resource identifier
+            super("Listener");
+            // set display name
+            getAttributes().setTitle("Hello-World Resource");
+        }
+
+        @Override
+        public void handleGET(CoapExchange exchange) {
+            exchange.respond("Respond");
+        }
+
+        @Override
+        public void handlePUT(CoapExchange exchange) {
+            byte[] payload = exchange.getRequestPayload();
+            String destination;
+            try {
+            	System.out.println("Richiesta PUT, SERVER");
+                String value = new String(payload, "UTF-8");
+                System.out.println(value);
+                exchange.respond(CHANGED, value);
+                //destination=selector.groupSelect();
+                Request post = new Request(Code.PUT);
+                post.setURI("coap://127.0.0.1:5683");
+                post.setMulticast(true);
+                post.setPayload(value);
+                post.getOptions()
+                .setContentFormat(MediaTypeRegistry.TEXT_PLAIN)
+                .setAccept(MediaTypeRegistry.TEXT_PLAIN)
+                .setIfNoneMatch(true);
+                try {
+        			String response = post.send().waitForResponse().getPayloadString();
+        		} catch (InterruptedException e) {
+        			e.printStackTrace();
+        		}
+            } catch (Exception e) {
+                e.printStackTrace();
+                exchange.respond(BAD_REQUEST, "Invalid String");
+            }
+        }
+    }
+
+}
+----
+
+===== Selector
+[source,java]
+----
+package step1;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
+//decide a quale sottogruppo mandare l'input
+public class Selector {
+
+	String group;
+
+	String groupSelect(){
+		setGroup("coap://localhost/Ricevitore");
+		return group;
+	}
+
+	void setGroup(String s){
+		group=s;
+	}
+}
+----
+
+==== Lampadina
+
+===== Server
+[source,java]
+----
+package step1;
+
+import static org.eclipse.californium.core.coap.CoAP.ResponseCode.BAD_REQUEST;
+import static org.eclipse.californium.core.coap.CoAP.ResponseCode.CHANGED;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+
+import org.eclipse.californium.core.CoapResource;
+import org.eclipse.californium.core.CoapServer;
+import org.eclipse.californium.core.network.CoAPEndpoint;
+import org.eclipse.californium.core.network.Endpoint;
+import org.eclipse.californium.core.network.config.NetworkConfig;
+import org.eclipse.californium.core.server.resources.CoapExchange;
+
+public class LServer {
+
+
+	public static void main(String[] args) throws IOException {
+        // binds on UDP port 5683
+		//InetAddress addr = InetAddress.getByName("224.0.1.187");
+
+		//MulticastSocket s=new MulticastSocket(5683);
+		//s.joinGroup(addr);
+		InetSocketAddress a=new InetSocketAddress("127.0.0.1",5683);
+        CoapServer server = new CoapServer();
+        Endpoint endpoint = new CoAPEndpoint(a, NetworkConfig.getStandard());
+        server.addEndpoint(endpoint);
+        server.add(new HelloResource());
+        server.start();
+    }
+
+    public static class HelloResource extends CoapResource {
+        public HelloResource() {
+            // resource identifier
+            super("Ricevitore");
+            // set display name
+            getAttributes().setTitle("Hello-World Resource");
+        }
+
+        @Override
+        public void handleGET(CoapExchange exchange) {
+            exchange.respond("Respond");
+        }
+
+        @Override
+        public void handlePUT(CoapExchange exchange) {
+            byte[] payload = exchange.getRequestPayload();
+            try {
+            	System.out.println("Richiesta PUT, LAMPADINA");
+                String value = new String(payload, "UTF-8");
+                System.out.println(value);
+                exchange.respond(CHANGED, value);
+            } catch (Exception e) {
+                e.printStackTrace();
+                exchange.respond(BAD_REQUEST, "Invalid String");
+            }
+        }
+    }
+
+}
+----
+
+==== Motivazioni dell'abbandono
+Una volta arrivati a questo punto si è provato, come in precedenza, ad aggiungere il multicast, senza però alcun successo. Dopo un'attenta analisi del codice e svariati tentativi, infatti, abbiamo capito che neanche nel californium(almeno alla versione disponibile al momento in cui si scrive, ovvero la release 1.0.0-M2 footnote:[http://github.com/eclipse/californium/tree/1.0.0-M2]) è stata implementata questa feature. Siamo arrivati alla conclusione quindi che non esistono implementazioni del CoAP in Java che supportano il multicast.
+
+=== CoAPthon
+A questo punto ci si è informati su tutte le implementazioni del CoAP, non solo su quelle realizzate in Java, e alla fine si è scelto di studiare il CoaPthon, perché tra le caratteristiche presentava in bella vista il supporto al multicast.
+
+Una difficoltà che si è avuta inizialmente è stata quella di imparare un nuovo linguaggio di programmazione in quanto questa implementazione è realizzata in python, un linguaggio che non era stato studiato fino ad ora dall'autore della tesi. Fortunatamente esso si presenta fin da subito abbastanza user-friendly e non si riscontrano particolari ostacoli nell'impararne gli aspetti fondamentali.
+
+==== CoAPclient
+
+All'interno del codice del CoAPthon subito si nota il file coapclient.py, un programma che quando viene eseguito permette di mandare richieste CoAP inserendo da terminale le informazioni necessarie, come l’operazione da compiere(GET, PUT, ecc.), il percorso della richiesta e il payload. Se ne apprezzano dunque l’intuitività e il meccanismo di black-box e si cerca un modo per adattarlo agli scopi del progetto.
+
+Semplicemente vengono modificati gli argomenti presi in ingresso dal terminale, aggiungendo l'indirizzo del destinatario mediante l'opzione “-A”. In questo modo, per mandare una richiesta all'interno di un programma basterà chiedere al sistema operativo di lanciare una stringa sulla linea di comando. Avendo a disposizione questo strumento si è creato client e server partendo dalla base dei codici di esempio creati da Giacomo Tanganelli(lo sviluppatore principale del CoAPthon).
+
+==== Errori riscontrati e risoluzione
+Una volta installate tutte le librerie necessarie si è riscontrato un errore all'interno del codice del file client/coap_protocol.py:
+
+[source,python]
+----
+logfile = DailyLogFile("CoAPthon_client.log", home + "/.coapthon/")
+----
+
+e del file server/coap_protocol.py:
+
+[source,python]
+----
+logfile = DailyLogFile("CoAPthon_server.log", home + "/.coapthon/")
+----
+
+Queste istruzioni non permettono il corretto funzionamento su sistemi operativi windows(il sistema sul quale si stava lavorando in quel periodo), in quanto il percorso indicato non è lecito perché era stato pensato per linux. Pertanto si è modificato le due righe nel seguente modo:
+
+[source,python]
+----
+logfile = DailyLogFile("CoAPthon_client.log", "/coapthon/")
+----
+
+e
+
+[source,python]
+----
+logfile = DailyLogFile("CoAPthon_client.log", "/coapthon/")
+----
+
+Come si può notare è stato eliminato il punto dal percorso. In questo modo la cartella creata non sarà nascosta, ma almeno il programma sarà multipiattaforma.
+Una volta risolti questi problemi si è cercato di inserire lo scambio di richieste in multicast all'interno del programma. Per farlo abbiamo utilizzato le seguenti istruzioni, che servono ad abilitare il server all'ascolto di richieste multicast.
+
+[source,python]
+----
+server = CoAPServer(group, 5683)
+reactor.listenMulticast(5683, server, listenMultiple=True)
+----
+
+dove il costruttore di CoAPServer è:
+
+[source,python]
+----
+def __init__(self, host, port, multicast=False):
+----
+
+e “group” indica l'indirizzo IP multicast al quale il server presta ascolto.
+
+Dopo varie prove si è riusciti a legare diversi server ad un unico indirizzo IP multicast e a mandare richieste di multicast dal client al gruppo di server. Questi ultimi ricevono il messaggio del client e rispondo correttamente, mentre il client nonostante riceva tutte le risposte alza un'eccezione:
+
+[source]
+----
+("Can't stop reactor that isn't running.") twisted.internet.error.ReactorNotRunning: Can't stop reactor that isn't running.)
+----
+
+Dopo svariati tentativi per cercare di risolvere questo problema si è deciso di contattare tramite e-mail il programmatore del CoAPthon: Giacomo Tanganelli. Costui si è rivelata fin da subito una persona disponibilissima e ha spiegato che con più server in esecuzione, il client solleva questa eccezione in ricezione perché si aspetta solo un ack, in quanto manda la richiesta ad un solo indirizzo IP, ma siccome l'indirizzo è di tipo multicast il messaggio verrà ricevuto da più macchine, che risponderanno ognuna con il proprio ack. Il client, perciò, si ritroverà risposte in eccesso e per questo lancerà quella eccezione. Dai test eseguiti, comunque, non risulta che questo problema intacchi la stabilità e il corretto funzionamento del sistema.
+
+Al momento della scrittura del programma l'ultima versione disponibile del coapthon era il coapthon 2, ma successivamente è uscita la versione 3, in cui questo errore potrebbe essere stato risolto.
+
+==== Motivazioni della scelta
+
+Concludendo, dunque, si è deciso di adottare il CoAPthon come implementazione del CoAP all'interno del progetto per i seguenti motivi:
+
+* in seguito a vari test effettuati si è dimostrato molto stabile;
+* il coapclient ha una struttura black-box che rende semplicissimo inviare un messaggio in CoAP, cosa non riscontrata in nessun'altra delle implementazioni provate fino ad ora;
+* è presente il supporto al multicast
+* il progetto è open-source e ben mantenuto
