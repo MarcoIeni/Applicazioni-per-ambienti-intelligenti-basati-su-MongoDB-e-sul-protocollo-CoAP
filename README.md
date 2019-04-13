@@ -17,9 +17,8 @@ Il servizio finale consente all’utente di:
 * comandare i propri attuatori, stabilendo regole di funzionamento in base all'orario e alla locazione dell'interruttore attivato, accendendo solo determinate luci oppure caricando da remoto un proprio programma in python da eseguire ottenendo, così, dei servizi personalizzati;
 * raggruppare i dispositivi in gruppi, in modo tale da avere una gestione più semplificata;
 * rendere pubblici i propri dispositivi, in modo che tutti gli utenti registrati nel sistema possano accedervi;
-* creare gruppi di utenti che hanno accesso solo a determinati gruppi di dispositivi. +
-Per esemplificare, si pensi ad un'università in cui tutte le porte siano considerate degli attuatori collegati a uno strumento capace di identificare un utente (lettore di impronte digitali, tastierino numerico, card reader, ecc.). Si potrebbe abilitare a un gruppo di tirocinanti l’apertura di tutte le porte che conducono al laboratorio dove devono recarsi, in modo tale da farli accedere solamente a determinate zone e salvare l’orario di entrata e di uscita dal laboratorio di ogni tirocinante;
-* ottenere informazioni in base alla posizione dei dispositivi. Ad esempio, è possibile ottenere una media della temperatura di un determinato luogo pesata in base alla precisione di ogni dispositivo a cui si ha accesso nelle vicinanze di un determinato punto, identificato da latitudine e longitudine.
+* creare gruppi di utenti che hanno accesso solo a determinati gruppi di dispositivi;
+* ottenere informazioni in base alla posizione dei dispositivi.
 
 ## Info ##
 * Nella cartella `/src` si trova la tesi, che è stata scritta con il formato asciidoc;
